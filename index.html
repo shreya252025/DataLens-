@@ -43,7 +43,26 @@ const sample=[
 ];
 let data=sample.map(x=>({...x})),headers=Object.keys(data[0]),page=1,pageSize=8,sourceName='Sample retail performance';
 function parseCSV(text){let rows=[],row=[],cell='',quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(quoted){if(c==='"'&&text[i+1]==='"'){cell+='"';i++;}else if(c==='"')quoted=false;else cell+=c;}else if(c==='"')quoted=true;else if(c===','){row.push(cell);cell='';}else if(c==='\n'){row.push(cell.replace(/\r$/,''));if(row.some(v=>v.trim()!==''))rows.push(row);row=[];cell='';}else cell+=c;}row.push(cell.replace(/\r$/,''));if(row.some(v=>v.trim()!==''))rows.push(row);if(rows.length<2)throw Error('The CSV needs a header row and at least one data row.');const hs=rows[0].map((v,i)=>v.trim()||`Column ${i+1}`);return {headers:hs,rows:rows.slice(1).map(r=>Object.fromEntries(hs.map((h,i)=>{let v=(r[i]??'').trim();if(v!==''&&Number.isFinite(Number(v)))v=Number(v);return [h,v]})))};}
-function isNum(h){const vals=data.map(r=>r[h]).filter(v=>v!==''&&v!==null&&v!==undefined);return vals.length>0&&vals.every(v=>typeof v==='number'&&Number.isFinite(v));}
+
+async function loadDefaultCSV(){
+  try {
+    const response = await fetch('./air_quality_dataset.csv');
+    if (!response.ok) throw new Error('CSV not found');
+
+    const csvText = await response.text();
+    const parsed = parseCSV(csvText);
+
+    headers = parsed.headers;
+    data = parsed.rows;
+    sourceName = 'Air Quality Dataset';
+
+    refresh();
+  } catch (error) {
+    refresh();
+    console.log('Could not load the default CSV:', error);
+  }
+}
+  function isNum(h){const vals=data.map(r=>r[h]).filter(v=>v!==''&&v!==null&&v!==undefined);return vals.length>0&&vals.every(v=>typeof v==='number'&&Number.isFinite(v));}
 function numeric(){return headers.filter(isNum)}function fmt(n){return Number(n).toLocaleString(undefined,{maximumFractionDigits:2})}function compact(n){return Intl.NumberFormat(undefined,{notation:'compact',maximumFractionDigits:1}).format(n)}
 function setOptions(el,items,first){el.innerHTML='';if(first!==null){let o=document.createElement('option');o.value='';o.textContent=first;el.append(o)}items.forEach(v=>{let o=document.createElement('option');o.value=v;o.textContent=v;el.append(o)});}
 function filtered(){let q=$('searchInput').value.trim().toLowerCase(),col=$('filterColumn').value,val=$('filterValue').value;return data.filter(r=>(!q||headers.some(h=>String(r[h]??'').toLowerCase().includes(q)))&&(!col||!val||String(r[col]??'')===val));}
@@ -54,6 +73,6 @@ function renderTable(){let rows=filtered(),pages=Math.max(1,Math.ceil(rows.lengt
 function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 $('fileInput').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const parsed=parseCSV(await f.text());if(parsed.rows.length>100000)throw Error('This prototype supports up to 100,000 rows per upload.');headers=parsed.headers;data=parsed.rows;sourceName=f.name;refresh();}catch(err){alert('Could not load this file: '+err.message+'\nPlease choose a valid CSV file.')}e.target.value='';});
 $('sampleBtn').addEventListener('click',()=>{headers=Object.keys(sample[0]);data=sample.map(x=>({...x}));sourceName='Sample retail performance';$('searchInput').value='';refresh()});$('chartField').addEventListener('change',renderChart);$('chartType').addEventListener('change',renderChart);$('searchInput').addEventListener('input',()=>{page=1;renderTable()});$('filterColumn').addEventListener('change',()=>{let c=$('filterColumn').value;if(!c){setOptions($('filterValue'),[],null);$('filterValue').disabled=true;}else{let values=[...new Set(data.map(r=>String(r[c]??'')))].sort().slice(0,500);setOptions($('filterValue'),values,'All values');$('filterValue').disabled=false;}$('filterValue').value='';page=1;renderTable()});$('filterValue').addEventListener('change',()=>{page=1;renderTable()});$('prevBtn').addEventListener('click',()=>{page=Math.max(1,page-1);renderTable()});$('nextBtn').addEventListener('click',()=>{page++;renderTable()});$('resetBtn').addEventListener('click',()=>{$('searchInput').value='';$('filterColumn').value='';setOptions($('filterValue'),[],null);$('filterValue').disabled=true;page=1;renderTable();renderChart()});$('downloadBtn').addEventListener('click',()=>{const rows=filtered(),q=v=>'"'+String(v??'').replace(/"/g,'""')+'"',csv=[headers.map(q).join(','),...rows.map(r=>headers.map(h=>q(r[h])).join(','))].join('\r\n'),blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='datalens-export.csv';a.click();URL.revokeObjectURL(url)});
-refresh();
+loadDefaultCSV();
 </script>
 </body></html>
